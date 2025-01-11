@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 1. 게임 이름 변경 -->
+    <title>두 자리 곱하기 한 자리</title>
+    <style>
+        body {
+            font-family: 'Nanum Gothic', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f8ff;
+        }
+        #game-container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #3a3a3a;
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 8px 4px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #energy-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        #energy-fill {
+            height: 100%;
+            width: 100%;
+            background-color: #4CAF50;
+            border-radius: 10px;
+            transition: width 0.1s linear;
+        }
+        #question, #score, #chances, #total-time {
+            margin-bottom: 20px;
+            font-size: 1.2em;
+        }
+        #answer-input {
+            font-size: 1.2em;
+            padding: 10px;
+            width: 100px;
+            margin-bottom: 20px;
+        }
+        #submit-answer {
+            font-size: 1.2em;
+            padding: 10px 20px;
+        }
+        .hidden {
+            display: none;
+        }
+        #result-screen {
+            font-size: 1.3em;
+            margin-bottom: 30px;
+        }
+        /* 이름 입력 필드 스타일 */
+        #username-input {
+            font-size: 1.2em;
+            padding: 10px;
+            margin-bottom: 20px;
+            width: 60%;
+        }
+        #response {
+            white-space: pre-wrap;
+            margin-top: 20px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- 1. 게임 이름 변경 -->
+        <h1>두 자리 곱하기 한 자리</h1>
+
+        <!-- 2. 첫 화면에 이름 입력란 추가 -->
+        <div id="start-screen">
+            <h2>이름을 입력하고 난이도를 선택하세요</h2>
+            <input type="text" id="username-input" placeholder="이름을 입력하세요">
+            <br>
+            <button onclick="startGame('veryHard')">최상</button>
+            <button onclick="startGame('hard')">상</button>
+            <button onclick="startGame('medium')">중</button>
+            <button onclick="startGame('easy')">하</button>
+        </div>
+
+        <div id="game-screen" class="hidden">
+            <div id="energy-bar"><div id="energy-fill"></div></div>
+            <div id="question"></div>
+            <input type="number" id="answer-input" placeholder="답을 입력하세요">
+            <button id="submit-answer" onclick="checkAnswer()">제출</button>
+            <div id="score">점수: 0</div>
+            <div id="chances">남은 기회: 3</div>
+            <div id="total-time">총 게임 시간: 00:00</div>
+        </div>
+
+        <div id="result-screen" class="hidden">
+            <h2>게임 종료!</h2>
+            <div id="final-score"></div>
+            <div id="final-time"></div>
+            <!-- 4. 점수전송 버튼 추가 -->
+            <button id="send-score" onclick="sendScore()">점수전송</button>
+            <button onclick="restartGame()">다시 시작</button>
+            <!-- 5. 전송 결과 표시 -->
+            <div id="response"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentDifficulty;
+        let score = 0;
+        let chances = 3;
+        let totalTime = 0;
+        let timerInterval;
+        let energyInterval;
+        let currentQuestion;
+        let currentAnswer;
+        let roundCount = 0;
+        let gameStartTime;
+        let playerName = ''; // 사용자 이름
+
+        // (원본 유지) 난이도별 제한시간, 점수
+        const difficulties = {
+            veryHard: { time: 20, points: 20 },
+            hard: { time: 30, points: 15 },
+            medium: { time: 40, points: 13 },
+            easy: { time: Infinity, points: 10 }
+        };
+
+        function startGame(difficulty) {
+            // 이름이 없으면 시작 불가
+            playerName = document.getElementById('username-input').value.trim();
+            if (!playerName) {
+                alert("이름을 입력하세요!");
+                return;
+            }
+
+            currentDifficulty = difficulty;
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            resetGame();
+            nextQuestion();
+            gameStartTime = Date.now();
+            updateTotalTime();
+        }
+
+        function resetGame() {
+            score = 0;
+            chances = 3;
+            roundCount = 0;
+            updateScore();
+            updateChances();
+        }
+
+        function generateMultiplication() {
+            let num1 = Math.floor(Math.random() * 90) + 10; // 10 to 99
+            let num2 = Math.floor(Math.random() * 9) + 1;  // 1 to 9
+            let question = `${num1} × ${num2}`;
+            let answer = num1 * num2;
+            return [question, answer];
+        }
+
+        function nextQuestion() {
+            clearInterval(energyInterval);
+            roundCount++;
+            [currentQuestion, currentAnswer] = generateMultiplication();
+
+            document.getElementById('question').textContent = `${currentQuestion} = ?`;
+            document.getElementById('answer-input').value = '';
+
+            startEnergyBar();
+        }
+
+        function startEnergyBar() {
+            let timeLimit = difficulties[currentDifficulty].time;
+            if (timeLimit === Infinity) return;
+
+            let energyFill = document.getElementById('energy-fill');
+            energyFill.style.width = '100%';
+
+            let startTime = Date.now();
+            energyInterval = setInterval(() => {
+                let elapsedTime = Date.now() - startTime;
+                let remainingPercentage = 100 - (elapsedTime / (timeLimit * 1000) * 100);
+                energyFill.style.width = `${remainingPercentage}%`;
+
+                if (remainingPercentage <= 0) {
+                    clearInterval(energyInterval);
+                    chances--;
+                    updateChances();
+                    if (chances > 0) {
+                        nextQuestion();
+                    } else {
+                        endGame();
+                    }
+                }
+            }, 100);
+        }
+
+        function checkAnswer() {
+            clearInterval(energyInterval);
+            let userAnswer = parseInt(document.getElementById('answer-input').value);
+            if (userAnswer === currentAnswer) {
+                score += difficulties[currentDifficulty].points;
+                updateScore();
+                nextQuestion();
+            } else {
+                chances--;
+                updateChances();
+                if (chances > 0) {
+                    alert(`틀렸습니다. 정답은 ${currentAnswer}입니다.`);
+                    nextQuestion();
+                } else {
+                    endGame();
+                }
+            }
+        }
+
+        function updateScore() {
+            document.getElementById('score').textContent = `점수: ${score}`;
+        }
+
+        function updateChances() {
+            document.getElementById('chances').textContent = `남은 기회: ${chances}`;
+        }
+
+        function updateTotalTime() {
+            timerInterval = setInterval(() => {
+                let elapsedSeconds = Math.floor((Date.now() - gameStartTime) / 1000);
+                let minutes = Math.floor(elapsedSeconds / 60);
+                let seconds = elapsedSeconds % 60;
+                document.getElementById('total-time').textContent = 
+                    `총 게임 시간: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        function endGame() {
+            clearInterval(timerInterval);
+            clearInterval(energyInterval);
+
+            let finalTime = document.getElementById('total-time').textContent.split(': ')[1];
+
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+
+            document.getElementById('final-score').textContent = `최종 점수: ${score}점`;
+            document.getElementById('final-time').textContent = `총 게임 시간: ${finalTime}`;
+        }
+
+        function restartGame() {
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+        }
+
+        // Enter 키로 답변 제출
+        document.getElementById('answer-input').addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                checkAnswer();
+            }
+        });
+
+        // 3. 서버로 데이터 전송을 위한 함수 (사용자 요청 코드 그대로)
+        function saveData(game, name, score, elapsedTime) {
+            const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+            const requestData = {
+                game,
+                name,
+                score: parseInt(score, 10),
+                elapsedTime: parseInt(elapsedTime, 10)
+            };
+
+            try {
+                const response = fetch(FUNCTION_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const responseData = response.json();
+
+                if (response.ok) {
+                    document.getElementById('response').innerText = 
+                        `성공: ${JSON.stringify(responseData, null, 2)}`;
+                } else {
+                    document.getElementById('response').innerText = 
+                        `오류: ${JSON.stringify(responseData, null, 2)}`;
+                }
+            } catch (error) {
+                console.error('요청 실패:', error);
+                document.getElementById('response').innerText = 
+                    `네트워크 오류: ${error.message}`;
+            }
+        }
+
+        // 4,5. "점수전송" 버튼 클릭 시 서버로 전송 + 성공 여부 알림
+        function sendScore() {
+            // game 이름은 "두 자리 곱하기 한 자리"로 고정
+            const gameName = "두 자리 곱하기 한 자리";
+
+            // 최종 시간(문자열 "mm:ss")을 초 단위로 변환
+            const finalTimeStr = document.getElementById('final-time').textContent.split(': ')[1];
+            const [mm, ss] = finalTimeStr.split(':');
+            const elapsedTimeSeconds = parseInt(mm, 10) * 60 + parseInt(ss, 10);
+
+            saveData(gameName, playerName, score, elapsedTimeSeconds);
+        }
+    </script>
+</body>
+</html>
